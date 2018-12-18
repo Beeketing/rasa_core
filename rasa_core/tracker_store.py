@@ -33,6 +33,11 @@ class TrackerStore(object):
                                      host=store.url,
                                      event_broker=event_broker,
                                      **store.kwargs)
+        elif store.store_type == 'redis-cluster':
+            return RedisClusterTrackerStore(domain=domain,
+                                     host=store.url,
+                                     event_broker=event_broker,
+                                     **store.kwargs)
         elif store.store_type == 'mongod':
             return MongoTrackerStore(domain=domain,
                                      host=store.url,
@@ -143,6 +148,47 @@ class InMemoryTrackerStore(TrackerStore):
         return self.store.keys()
 
 
+class RedisClusterTrackerStore(TrackerStore):
+    def keys(self):
+        pass
+
+    def __init__(self, domain, hosts_and_ports='localhost:6379',
+    			 password=None, event_broker=None,
+                 record_exp=None):
+    	host_and_port = hosts_and_ports.split(',')
+    	startup_nodes = []
+    	for hap in host_and_port:
+    		part = hap.split(':')
+    		tmp = dict()
+    		if (len(part==2)):
+    			tmp['host'] = part[0]
+    			tmp['port'] = part[1]
+    			startup_nodes.append(tmp)
+    		else :
+    			logger.warning('Parsing error in host and port {}'.format(hap))
+
+        import rediscluster
+        self.red = rediscluster.StrictRedisCluster(startup_nodes=startup_nodes, decode_responses=True, password=password)
+        self.record_exp = record_exp
+        super(RedisClusterTrackerStore, self).__init__(domain, event_broker)
+
+    def save(self, tracker, timeout=None):
+        if self.event_broker:
+            self.stream_events(tracker)
+
+        if not timeout and self.record_exp:
+            timeout = self.record_exp
+
+        serialised_tracker = self.serialise_tracker(tracker)
+        self.red.set(tracker.sender_id, serialised_tracker, ex=timeout)
+
+    def retrieve(self, sender_id):
+        stored = self.red.get(sender_id)
+        if stored is not None:
+            return self.deserialise_tracker(sender_id, stored)
+        else:
+            return None
+
 class RedisTrackerStore(TrackerStore):
     def keys(self):
         pass
@@ -173,7 +219,6 @@ class RedisTrackerStore(TrackerStore):
             return self.deserialise_tracker(sender_id, stored)
         else:
             return None
-
 
 class MongoTrackerStore(TrackerStore):
     def __init__(self,
