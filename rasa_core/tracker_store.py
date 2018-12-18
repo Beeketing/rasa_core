@@ -35,7 +35,7 @@ class TrackerStore(object):
                                      **store.kwargs)
         elif store.store_type == 'redis-cluster':
             return RedisClusterTrackerStore(domain=domain,
-                                     host=store.url,
+                                     hosts_and_ports=store.url,
                                      event_broker=event_broker,
                                      **store.kwargs)
         elif store.store_type == 'mongod':
@@ -155,20 +155,20 @@ class RedisClusterTrackerStore(TrackerStore):
     def __init__(self, domain, hosts_and_ports='localhost:6379',
     			 password=None, event_broker=None,
                  record_exp=None):
-    	host_and_port = hosts_and_ports.split(',')
-    	startup_nodes = []
-    	for hap in host_and_port:
-    		part = hap.split(':')
-    		tmp = dict()
-    		if (len(part==2)):
-    			tmp['host'] = part[0]
-    			tmp['port'] = part[1]
-    			startup_nodes.append(tmp)
-    		else :
-    			logger.warning('Parsing error in host and port {}'.format(hap))
-
+        logger.debug('Using redis cluster {}'.format(hosts_and_ports))
+        host_and_port = hosts_and_ports.split(',')
+        startup_nodes = []
+        for hap in host_and_port:
+            part = hap.split(':')
+            tmp = dict()
+            if (len(part)==2):
+                tmp['host'] = part[0]
+                tmp['port'] = part[1]
+                startup_nodes.append(tmp)
+            else :
+                logger.warning('Parsing error in host and port {}'.format(hap))
         import rediscluster
-        self.red = rediscluster.StrictRedisCluster(startup_nodes=startup_nodes, decode_responses=True, password=password)
+        self.red = rediscluster.StrictRedisCluster(startup_nodes=startup_nodes, password=password)
         self.record_exp = record_exp
         super(RedisClusterTrackerStore, self).__init__(domain, event_broker)
 
